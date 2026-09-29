@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+**/.next
+**/dist
+.git
+.env
+.env.*
+!.env.example
+!.env.staging.example
+uploads
+coverage
+*.log
+.edge-profile

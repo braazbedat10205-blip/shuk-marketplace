@@ -1,0 +1,28 @@
+export const statusLabels: Readonly<Record<string, string>> = {
+  PENDING: 'ממתין',
+  UNDER_REVIEW: 'בבדיקה',
+  APPROVED: 'מאושר',
+  REJECTED: 'נדחה',
+  SUSPENDED: 'מושעה',
+  DRAFT: 'טיוטה',
+  PENDING_APPROVAL: 'ממתין לאישור',
+  ACTIVE: 'פעיל',
+  ARCHIVED: 'בארכיון',
+  PENDING_PAYMENT: 'ממתין לתשלום',
+  PAID: 'שולם',
+  PROCESSING: 'בטיפול',
+  READY_TO_SHIP: 'מוכן למשלוח',
+  SHIPPED: 'נשלח',
+  IN_TRANSIT: 'בדרך',
+  DELIVERED: 'נמסר',
+  CANCELLED: 'בוטל',
+  RETURN_REQUESTED: 'בקשת החזרה',
+  RETURNED: 'הוחזר',
+  REFUNDED: 'זוכה',
+  AUTHORIZED: 'אושר',
+  CAPTURED: 'נגבה',
+  FAILED: 'נכשל',
+  PARTIALLY_REFUNDED: 'זוכה חלקית',
+};
+
+export const statusLabel = (value?: string | null) => value ? statusLabels[value] ?? value : '—';

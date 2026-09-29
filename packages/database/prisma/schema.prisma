@@ -1,0 +1,477 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  SELLER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum SellerStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum ProductStatus {
+  DRAFT
+  PENDING_APPROVAL
+  ACTIVE
+  REJECTED
+  ARCHIVED
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PROCESSING
+  READY_TO_SHIP
+  SHIPPED
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+  RETURN_REQUESTED
+  RETURNED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+enum LedgerType {
+  CUSTOMER_PAYMENT
+  MARKETPLACE_COMMISSION
+  SELLER_BALANCE
+  SHIPPING_FEE
+  REFUND
+  ADJUSTMENT
+  PAYOUT
+}
+
+enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  RETURN_SHIPPED
+  RECEIVED
+  REFUNDED
+  CLOSED
+}
+
+enum IdempotencyStatus {
+  PROCESSING
+  SUCCEEDED
+}
+
+model User {
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String    @unique
+  passwordHash    String
+  phone           String?   @unique
+  firstName       String
+  lastName        String
+  emailVerifiedAt DateTime?
+  suspendedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  roles               UserRole[]
+  seller              SellerProfile?
+  addresses           Address[]
+  orders              Order[]
+  reviews             Review[]
+  passwordResetTokens PasswordResetToken[]
+  authSessions        AuthSession[]
+  idempotencyRecords  IdempotencyRecord[]
+}
+
+model AuthSession {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @db.Uuid
+  familyId    String    @db.Uuid
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  replacedById String?  @unique @db.Uuid
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime?
+
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replacedBy AuthSession? @relation("SessionRotation", fields: [replacedById], references: [id])
+  replaces   AuthSession? @relation("SessionRotation")
+
+  @@index([userId, revokedAt, expiresAt])
+  @@index([familyId, revokedAt])
+}
+
+model IdempotencyRecord {
+  id          String            @id @default(uuid()) @db.Uuid
+  userId      String            @db.Uuid
+  operation   String
+  key         String
+  requestHash String
+  status      IdempotencyStatus @default(PROCESSING)
+  orderId     String?           @db.Uuid
+  createdAt   DateTime          @default(now())
+  completedAt DateTime?
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, operation, key])
+  @@index([createdAt])
+  @@index([orderId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model UserRole {
+  userId String @db.Uuid
+  role   Role
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, role])
+}
+
+model SellerProfile {
+  id                 String       @id @default(uuid()) @db.Uuid
+  userId             String       @unique @db.Uuid
+  businessName       String
+  businessNumber     String?
+  status             SellerStatus @default(PENDING)
+  regionCode         String       @default("IL")
+  verificationLevel  String       @default("NONE")
+  rating             Decimal      @default(0) @db.Decimal(3, 2)
+  commissionBps      Int?
+  applicationAddress String?
+  activityType       String?
+  additionalInfo     String?
+  rejectionReason    String?
+  appliedAt          DateTime     @default(now())
+
+  user         User             @relation(fields: [userId], references: [id])
+  store        Store?
+  products     Product[]
+  sellerOrders SellerOrder[]
+  documents    SellerDocument[]
+}
+
+model SellerDocument {
+  id         String   @id @default(uuid()) @db.Uuid
+  sellerId   String   @db.Uuid
+  type       String
+  storageKey String
+  status     String
+  createdAt  DateTime @default(now())
+
+  seller SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+}
+
+model Store {
+  id          String  @id @default(uuid()) @db.Uuid
+  sellerId    String  @unique @db.Uuid
+  slug        String  @unique
+  name        String
+  description String?
+  city        String?
+  logoUrl     String?
+
+  seller SellerProfile @relation(fields: [sellerId], references: [id])
+}
+
+model Category {
+  id            String  @id @default(uuid()) @db.Uuid
+  parentId      String? @db.Uuid
+  slug          String  @unique
+  nameHe        String
+  nameAr        String?
+  nameEn        String?
+  commissionBps Int?
+  position      Int     @default(0)
+  active        Boolean @default(true)
+
+  parent   Category?  @relation("tree", fields: [parentId], references: [id])
+  children Category[] @relation("tree")
+  products Product[]
+
+  @@index([parentId, position])
+}
+
+model Product {
+  id                   String        @id @default(uuid()) @db.Uuid
+  sellerId             String        @db.Uuid
+  categoryId           String        @db.Uuid
+  slug                 String        @unique
+  sku                  String
+  nameHe               String
+  nameAr               String?
+  nameEn               String?
+  descriptionHe        String
+  status               ProductStatus @default(DRAFT)
+  priceAgorot          Int
+  compareAtAgorot      Int?
+  commissionBps        Int?
+  supportsFastDelivery Boolean       @default(false)
+  deletedAt            DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  seller     SellerProfile    @relation(fields: [sellerId], references: [id])
+  category   Category         @relation(fields: [categoryId], references: [id])
+  variants   ProductVariant[]
+  images     ProductImage[]
+  orderItems OrderItem[]
+
+  @@unique([sellerId, sku])
+  @@index([categoryId, status, createdAt])
+  @@index([sellerId, status])
+}
+
+model ProductVariant {
+  id          String @id @default(uuid()) @db.Uuid
+  productId   String @db.Uuid
+  sku         String @unique
+  name        String
+  priceAgorot Int?
+
+  product   Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inventory Inventory?
+}
+
+model ProductImage {
+  id         String  @id @default(uuid()) @db.Uuid
+  productId  String  @db.Uuid
+  storageUrl String
+  altText    String?
+  position   Int     @default(0)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, position])
+}
+
+model Inventory {
+  id        String @id @default(uuid()) @db.Uuid
+  variantId String @unique @db.Uuid
+  quantity  Int
+  reserved  Int    @default(0)
+  version   Int    @default(0)
+
+  variant ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@index([quantity])
+}
+
+model Address {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @db.Uuid
+  fullName     String   @default("")
+  phone        String   @default("")
+  city         String
+  street       String
+  building     String
+  apartment    String?
+  postalCode   String?
+  instructions String?
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Order {
+  id              String      @id @default(uuid()) @db.Uuid
+  orderNumber     String      @unique
+  userId          String      @db.Uuid
+  status          OrderStatus @default(PENDING_PAYMENT)
+  currency        String      @default("ILS")
+  totalAgorot     Int
+  shippingAddress Json
+  createdAt       DateTime    @default(now())
+
+  user          User          @relation(fields: [userId], references: [id])
+  sellerOrders  SellerOrder[]
+  payment       Payment?
+  ledgerEntries LedgerEntry[]
+  idempotencyRecords IdempotencyRecord[]
+
+  @@index([userId, createdAt])
+}
+
+model SellerOrder {
+  id               String      @id @default(uuid()) @db.Uuid
+  orderId          String      @db.Uuid
+  sellerId         String      @db.Uuid
+  status           OrderStatus @default(PENDING_PAYMENT)
+  subtotalAgorot   Int
+  shippingAgorot   Int         @default(0)
+  commissionAgorot Int
+  netAgorot        Int
+
+  order     Order         @relation(fields: [orderId], references: [id])
+  seller    SellerProfile @relation(fields: [sellerId], references: [id])
+  items     OrderItem[]
+  shipments Shipment[]
+
+  @@unique([orderId, sellerId])
+  @@index([sellerId, status, orderId])
+}
+
+model OrderItem {
+  id               String  @id @default(uuid()) @db.Uuid
+  sellerOrderId    String  @db.Uuid
+  productId        String? @db.Uuid
+  productName      String
+  sku              String
+  variantName      String?
+  quantity         Int
+  unitPriceAgorot  Int
+  discountAgorot   Int     @default(0)
+  commissionAgorot Int
+
+  sellerOrder SellerOrder @relation(fields: [sellerOrderId], references: [id])
+  product     Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+}
+
+model Payment {
+  id                    String        @id @default(uuid()) @db.Uuid
+  orderId               String        @unique @db.Uuid
+  provider              String
+  providerTransactionId String?       @unique
+  status                PaymentStatus
+  amountAgorot          Int
+  providerTokenRef      String?
+
+  order     Order    @relation(fields: [orderId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model LedgerEntry {
+  id             String     @id @default(uuid()) @db.Uuid
+  orderId        String?    @db.Uuid
+  sellerId       String?    @db.Uuid
+  type           LedgerType
+  amountAgorot   Int
+  currency       String     @default("ILS")
+  referenceId    String
+  idempotencyKey String     @unique
+  metadata       Json?
+  createdAt      DateTime   @default(now())
+
+  order Order? @relation(fields: [orderId], references: [id])
+
+  @@index([sellerId, createdAt])
+  @@index([orderId, createdAt])
+}
+
+model CommissionRule {
+  id       String    @id @default(uuid()) @db.Uuid
+  scope    String
+  scopeId  String?
+  rateBps  Int
+  startsAt DateTime  @default(now())
+  endsAt   DateTime?
+  active   Boolean   @default(true)
+
+  @@index([scope, scopeId, active])
+}
+
+model ShippingProvider {
+  id     String  @id @default(uuid()) @db.Uuid
+  code   String  @unique
+  name   String
+  active Boolean @default(true)
+
+  shipments Shipment[]
+}
+
+model Shipment {
+  id                String    @id @default(uuid()) @db.Uuid
+  sellerOrderId     String    @db.Uuid
+  providerId        String    @db.Uuid
+  trackingNumber    String?   @unique
+  status            String
+  estimatedDelivery DateTime?
+  deliveredAt       DateTime?
+
+  sellerOrder SellerOrder      @relation(fields: [sellerOrderId], references: [id])
+  provider    ShippingProvider @relation(fields: [providerId], references: [id])
+  events      TrackingEvent[]
+}
+
+model TrackingEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  shipmentId  String   @db.Uuid
+  status      String
+  description String?
+  occurredAt  DateTime
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId, occurredAt])
+}
+
+model Review {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @db.Uuid
+  productId        String?  @db.Uuid
+  sellerId         String?  @db.Uuid
+  rating           Int
+  text             String?
+  verifiedPurchase Boolean  @default(false)
+  status           String   @default("PENDING")
+  createdAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([productId, status])
+  @@index([sellerId, status])
+}
+
+model ReturnRequest {
+  id          String       @id @default(uuid()) @db.Uuid
+  orderItemId String       @db.Uuid
+  status      ReturnStatus @default(REQUESTED)
+  reason      String
+  description String?
+  requestedAt DateTime     @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @db.Uuid
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+}

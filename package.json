@@ -1,0 +1,27 @@
+{
+  "name": "shuk-local-marketplace",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @shuk/web",
+    "dev:api": "npm run start:dev -w @shuk/api",
+    "build": "npm run build -w @shuk/web && npm run build -w @shuk/api",
+    "test": "npm run test -w @shuk/api",
+    "db:generate": "npm run generate -w @shuk/database",
+    "db:migrate": "npm run migrate -w @shuk/database",
+    "db:seed": "npm run seed -w @shuk/database",
+    "test:launch": "node scripts/launch-e2e.cjs",
+    "test:mobile": "node scripts/launch-mobile-qa.cjs",
+    "staging:preflight": "node scripts/staging-preflight.cjs"
+  },
+  "devDependencies": {
+    "@prisma/client": "6.7.0",
+    "class-transformer": "0.5.1",
+    "class-validator": "0.14.2",
+    "playwright-core": "^1.62.1",
+    "prisma": "6.7.0"
+  }
+}

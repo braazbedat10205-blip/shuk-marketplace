@@ -1,0 +1,12 @@
+"use client";
+import {createContext,useContext,useEffect,useMemo,useState,type ReactNode} from "react";
+export type Locale="he"|"ar"|"en";
+const copy={
+ he:{market:"Marketplace ישראלי",live:"מחירים ומלאי מעודכנים ישירות מהשרת",search:"חיפוש",searchPlaceholder:"חיפוש מוצרים, מותגים או SKU",account:"החשבון שלי",login:"כניסה",cart:"סל",favorites:"מועדפים",categories:"קטגוריות",new:"חדשים",stock:"במלאי עכשיו",sell:"מכירה בשוק",shopping:"קנייה",allProducts:"כל המוצרים",profile:"פרופיל והזמנות",orders:"מעקב הזמנות",openStore:"פתיחת חנות",tagline:"מקום אחד לגלות ולקנות מעסקים מקומיים ברחבי ישראל."},
+ ar:{market:"سوق إسرائيلي",live:"الأسعار والمخزون محدثان مباشرة من الخادم",search:"بحث",searchPlaceholder:"ابحث عن منتجات، علامات أو SKU",account:"حسابي",login:"دخول",cart:"السلة",favorites:"المفضلة",categories:"الفئات",new:"وصل حديثًا",stock:"متوفر الآن",sell:"بع في السوق",shopping:"التسوق",allProducts:"كل المنتجات",profile:"الملف والطلبات",orders:"تتبع الطلبات",openStore:"افتح متجرًا",tagline:"مكان واحد لاكتشاف والشراء من الأعمال المحلية في إسرائيل."},
+ en:{market:"Israeli marketplace",live:"Server-verified prices and inventory",search:"Search",searchPlaceholder:"Search products, brands or SKU",account:"My account",login:"Sign in",cart:"Cart",favorites:"Favorites",categories:"Categories",new:"New arrivals",stock:"In stock",sell:"Sell on Shuk",shopping:"Shopping",allProducts:"All products",profile:"Profile & orders",orders:"Track orders",openStore:"Open a store",tagline:"One place to discover and buy from local businesses across Israel."}
+} as const;
+type Key=keyof typeof copy.he;
+const LanguageContext=createContext<{locale:Locale;setLocale:(locale:Locale)=>void;t:(key:Key)=>string}|null>(null);
+export function LanguageProvider({children}:{children:ReactNode}){const[locale,setLocaleState]=useState<Locale>("he");useEffect(()=>{const saved=localStorage.getItem("shuk-locale") as Locale|null;if(saved&&saved in copy)setLocaleState(saved)},[]);useEffect(()=>{document.documentElement.lang=locale;document.documentElement.dir=locale==="en"?"ltr":"rtl";localStorage.setItem("shuk-locale",locale)},[locale]);const value=useMemo(()=>({locale,setLocale:setLocaleState,t:(key:Key)=>copy[locale][key]}),[locale]);return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>}
+export function useLanguage(){const value=useContext(LanguageContext);if(!value)throw new Error("LanguageProvider missing");return value}
