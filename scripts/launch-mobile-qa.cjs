@@ -16,6 +16,19 @@ async function audit(page,route){
  await page.goto(`${WEB}${route}`,{waitUntil:'networkidle',timeout:30000});await page.waitForTimeout(250);
  return page.evaluate(({route,errors})=>{const visible=element=>{const style=getComputedStyle(element),rect=element.getBoundingClientRect();return style.display!=='none'&&style.visibility!=='hidden'&&rect.width>0&&rect.height>0};const outside=[...document.querySelectorAll('button,a,input,select,textarea,img')].filter(visible).filter(element=>{const r=element.getBoundingClientRect();return r.left<-.5||r.right>innerWidth+.5}).slice(0,8).map(element=>`${element.tagName}.${element.className}`);return{route,viewport:`${innerWidth}x${innerHeight}`,horizontalOverflow:document.documentElement.scrollWidth>innerWidth+1,outside,unnamedButtons:[...document.querySelectorAll('button')].filter(visible).filter(button=>!(button.textContent?.trim()||button.getAttribute('aria-label')||button.getAttribute('title'))).length,missingAlt:[...document.querySelectorAll('img')].filter(image=>!image.hasAttribute('alt')).length,pageErrors:errors,dir:document.documentElement.dir,lang:document.documentElement.lang}},{route,errors});
 }
+async function auditAdminNavigation(page){
+ const expected=['סקירה','משתמשים','מוכרים','מוצרים','קטגוריות','הזמנות','כספים'],errors=[];
+ const trigger=page.locator('.adminMenuButton');await trigger.click();
+ const navigation=page.locator('#admin-navigation');await navigation.waitFor({state:'visible'});
+ const labels=await navigation.locator('button:not(.adminNavClose)').allTextContents();
+ if(JSON.stringify(labels.map(value=>value.trim()))!==JSON.stringify(expected))errors.push(`Admin destinations mismatch: ${JSON.stringify(labels)}`);
+ const overflow=await page.evaluate(()=>{const nav=document.querySelector('#admin-navigation'),rect=nav?.getBoundingClientRect();return !rect||rect.left<-.5||rect.right>innerWidth+.5||rect.top<-.5||rect.bottom>innerHeight+.5});
+ if(overflow)errors.push('Admin drawer is outside the viewport');
+ await page.keyboard.press('Escape');if(await navigation.isVisible())errors.push('Escape did not close admin drawer');
+ if(!(await trigger.evaluate(element=>document.activeElement===element)))errors.push('Focus was not restored to admin menu button');
+ await trigger.click();await navigation.locator('button',{hasText:'משתמשים'}).click();if(await navigation.isVisible())errors.push('Selecting an admin destination did not close drawer');
+ return{route:'/admin#mobile-navigation',horizontalOverflow:false,outside:[],unnamedButtons:0,missingAlt:0,pageErrors:errors,dir:await page.locator('html').getAttribute('dir'),lang:await page.locator('html').getAttribute('lang')};
+}
 async function main(){
  const prisma=new PrismaClient({datasourceUrl:testUrl()});let api,web,browser;
  try{
@@ -26,7 +39,7 @@ async function main(){
   const customerRoutes=['/',`/?q=${encodeURIComponent('מוצר')}`,`/product/${product.slug}`,'/cart','/checkout',`/payment?orderId=${order.id}`,'/orders',`/orders/${order.id}`,'/account','/login','/become-seller','/definitely-missing'];
   for(const[width,height]of sizes){
    const context=await browser.newContext({viewport:{width,height},locale:'he-IL',isMobile:width<768,hasTouch:width<768});await context.addInitScript(({customerToken,product})=>{localStorage.setItem('shuk-token',customerToken);localStorage.setItem('shuk-cart',JSON.stringify([{productId:product.id,variantId:product.variants[0].id,slug:product.slug,name:product.nameHe,priceAgorot:product.priceAgorot,quantity:1,availableQuantity:product.variants[0].inventory.quantity,sellerName:'חנות אלפא'}]))},{customerToken,product});const page=await context.newPage();for(const route of customerRoutes)report.push({size:`${width}x${height}`,...await audit(page,route)});await context.close();
-   for(const[role,token,route]of [['seller',sellerToken,'/seller-dashboard'],['admin',adminToken,'/admin']]){const roleContext=await browser.newContext({viewport:{width,height},locale:'he-IL',isMobile:width<768,hasTouch:width<768});await roleContext.addInitScript(value=>localStorage.setItem('shuk-token',value),token);const rolePage=await roleContext.newPage();report.push({size:`${width}x${height}`,role,...await audit(rolePage,route)});await roleContext.close()}
+   for(const[role,token,route]of [['seller',sellerToken,'/seller-dashboard'],['admin',adminToken,'/admin']]){const roleContext=await browser.newContext({viewport:{width,height},locale:'he-IL',isMobile:width<768,hasTouch:width<768});await roleContext.addInitScript(value=>localStorage.setItem('shuk-token',value),token);const rolePage=await roleContext.newPage();report.push({size:`${width}x${height}`,role,...await audit(rolePage,route)});if(role==='admin'&&width<=412)report.push({size:`${width}x${height}`,role,...await auditAdminNavigation(rolePage)});await roleContext.close()}
   }
   const failures=report.filter(result=>result.horizontalOverflow||result.outside.length||result.unnamedButtons||result.missingAlt||result.pageErrors.length||result.dir!=='rtl'||result.lang!=='he');console.log(JSON.stringify({database:DB_NAME,sizes:sizes.map(size=>size.join('x')),pagesPerViewport:customerRoutes.length+2,checks:report.length,failures,passed:report.length-failures.length},null,2));if(failures.length)process.exitCode=1;
  }finally{if(browser)await browser.close();if(web)web.kill('SIGTERM');if(api)api.kill('SIGTERM');await prisma.$disconnect()}

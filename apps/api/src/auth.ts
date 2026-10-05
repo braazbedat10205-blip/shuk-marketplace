@@ -1,7 +1,7 @@
 import { Body, CanActivate, ConflictException, Controller, createParamDecorator, ExecutionContext, ForbiddenException, Get, Injectable, Module, Post, Req, Res, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Role } from '@prisma/client';
-import { IsEmail, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsDefined, IsEmail, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { compare, hash } from 'bcryptjs';
 import { createHash, randomBytes } from 'crypto';
 import { MailService } from './mail';
@@ -60,9 +60,9 @@ export class RolesGuard implements CanActivate {
   }
 }
 
-const strongPassword=/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,128}$/;
-class RegisterDto { @IsEmail() @MaxLength(254) email!: string; @IsString() @Matches(strongPassword,{message:'הסיסמה חייבת להכיל לפחות 12 תווים, אות גדולה, אות קטנה, מספר וסימן'}) password!: string; @IsString() @MinLength(1) @MaxLength(80) firstName!: string; @IsString() @MinLength(1) @MaxLength(80) lastName!: string; }
-class LoginDto { @IsEmail() @MaxLength(254) email!: string; @IsString() @MaxLength(128) password!: string; }
+export const strongPassword=/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,128}$/;
+export class RegisterDto { @IsEmail() @MaxLength(254) email!: string; @IsDefined({message:'יש להזין סיסמה'}) @IsString() @Matches(strongPassword,{message:'הסיסמה חייבת להכיל 12–128 תווים, אות אנגלית גדולה, אות אנגלית קטנה, מספר וסימן מיוחד'}) password!: string; @IsString() @MinLength(1) @MaxLength(80) firstName!: string; @IsString() @MinLength(1) @MaxLength(80) lastName!: string; }
+export class LoginDto { @IsEmail() @MaxLength(254) email!: string; @IsString() @MaxLength(128) password!: string; }
 class ForgotPasswordDto { @IsEmail() email!: string; }
 class ResetPasswordDto { @IsString() @MinLength(32) @MaxLength(128) token!: string; @IsString() @Matches(strongPassword,{message:'הסיסמה חייבת להכיל לפחות 12 תווים, אות גדולה, אות קטנה, מספר וסימן'}) password!: string; }
 
